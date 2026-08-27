@@ -49,6 +49,8 @@ docs/
 
 这些文档可以作为背景输入，但不能单独作为正式执行依据。凡是影响需求、设计、任务、Bugfix 的结论，都必须回写到 `docs/dev/sdd/` 中的正式文档。
 
+归档时 `docs/dev/research/` 默认不作为正式依据保留；若确有长期排查价值，可按归档规范复制到归档目录的 `research/` 并标注为非正式背景材料。无论是否复制，归档完成后都应从 `docs/dev/` 清理，避免旧阶段背景污染新阶段。
+
 ## `docs/dev/ui/`
 
 界面设计与展示材料目录。
@@ -87,23 +89,28 @@ docs/
 - `docs/archive/YYYYMMDD-<主题名>/sdd/task-execution-plan.md`
 - `docs/archive/YYYYMMDD-<主题名>/sdd/tasks-phase-{N}.md`
 - `docs/archive/YYYYMMDD-<主题名>/ui/`（如有）
+- `docs/archive/YYYYMMDD-<主题名>/research/`（可选，非正式背景材料）
 - `docs/archive/YYYYMMDD-<主题名>/test-report.html`（如有）
 
 归档索引统一维护在 `docs/archive/README.md`。
-如存在其他阶段性材料，也可按归档规范一并进入对应归档目录。清空 `docs/dev/` 前必须先完成归档验证。
+如存在其他阶段性材料，也可按归档规范一并进入对应归档目录。清空 `docs/dev/` 前必须先完成归档验证，并清理 `docs/dev/research/`、`docs/dev/sdd/`、`docs/dev/ui/` 等阶段工作目录。
 
 ## `docs/api/`
 
-接口文档维护目录。
+接口与能力文档维护目录。
 
-这里放需要长期维护和跨需求复用的接口说明，例如：
+这里放需要长期维护和跨需求复用的接口、协议和能力全貌说明，例如：
 
 - API 列表和接口索引
 - 请求 / 响应字段说明
 - IPC、HTTP、SDK 或内部模块接口约定
 - 接口变更说明和兼容性注意事项
+- 入口总览、能力矩阵、调用链和数据流
+- 行为细节、错误降级、约束限制、集成方式和扩展方法
 
-若需求或设计产生新的接口约定，应在正式设计文档中说明，并在需要长期维护时同步沉淀到 `docs/api/`。
+API 文档应从入口视角写能力全貌，让用户和其他 agent 不读全代码也能理解这个仓库能做什么、从哪里调用、边界在哪里、如何扩展。若需求或设计产生新的接口约定，应在正式设计文档中说明，并在需要长期维护时同步沉淀到 `docs/api/`。
+
+详细模板与评审清单见 `references/api-spec-guide.md`。
 
 ## `docs/bugfix/`
 

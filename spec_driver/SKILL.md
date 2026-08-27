@@ -94,7 +94,18 @@ docs/
 
 ### 7. AI Review Gate
 
-关键阶段必须由 Codex native subagent 以只读方式执行 AI Review Gate。Review 是自动判定点，不是默认人工暂停点：`PASS` 且 `Blocking: false` 时主流程自动继续；`FAIL` 或存在阻断项时必须停下治理，修复后重新 review。
+关键阶段必须由 Codex native subagent 以只读方式执行 AI Review Gate。每次 review 必须声明 `Review-Mode: initial | closure | incremental-phase`、当前 `Scope`、逐输入 hash 组成的 `Input-Revision` 和 `Previous-Review`。除“Review 授权的单任务完成状态转换”外，任一输入 revision 变化后，旧 review 立即 stale，不得继续作为 gate 凭证。该例外只允许对应 code review 已 `PASS / Blocking: false` 并明确允许标记完成后，在同一 `tasks-phase-{N}.md` 中把该 TASK 的一个状态单元格从待办改为完成；任务定义、依赖、TC、验证、其他状态或任何其他内容同时变化时，例外失效。
+
+Review 是收敛门禁，不是无限扩张式审计：
+- Review subagent 本身就是独立 reviewer；未经主 agent 明确授权，不得再委派或调用外部模型发起二次复核，并须在当前 scope 内单次完成、据实记录 Evidence、满足停止条件后立即输出最终 Gate。
+- `initial` 建立当前 scope 的完整基线；`closure` 只检查上轮 blocker closure、当前 diff 影响和全局不变量回归；`incremental-phase` 只检查新增/变更 Phase、直接依赖和全局不变量。
+- Blocking 仅限：需求直接冲突；跨 Phase 不可逆的安全/数据不变量；当前 scope 或直接依赖导致验收无法实现。后续 Phase 细节必须记为 `Deferred Finding` 并回写目标 Phase 正式文档，不得阻断早期 Phase。
+- Finding ledger 使用稳定 ID，保留 `open | closed | deferred`、`target phase`、`evidence`、`required fix`；旧 finding 不得消失或重编号。
+- 收敛停止条件是：prior blockers closed + current scope no blocker + invariants no regression。满足即 `PASS`，不得因“还能继续深挖”重复 review。
+
+上下游 gate 严格串行：当前 revision 的 `requirements-design-review` 为 `PASS` 后，才允许启动 `tasks-phase-{N}-review`。错误启动时只返回 `UPSTREAM-GATE-BLOCKED`，不得扫描 tasks 或生成新的全量结论。
+
+Review 是自动判定点，不是默认人工暂停点：`PASS` 且 `Blocking: false` 时主流程自动继续；`FAIL` 或存在阻断项时必须停下治理，修复后使用 `closure` 复审。
 
 只有以下情况需要暂停等待用户：
 - 设计调用链分析按设计规范要求必须用户确认
@@ -103,10 +114,11 @@ docs/
 
 强制 review 类型：
 - `requirements-design-review`：检查 `requirements.md` 与 `design.md` 是否一致；未通过禁止进入用户确认和任务拆解
-- `tasks-phase-{N}-review`：检查任务是否完整覆盖设计、TC、依赖和验证；未通过禁止进入 Phase 开发
+- `tasks-phase-{N}-review`：先校验当前 revision 的上游 gate，再检查任务是否完整覆盖当前 Phase 的设计、TC、依赖和验证；未通过禁止进入 Phase 开发
 - `TASK-P{N}-{NNN}-code-review`：检查任务代码、测试、交付凭证和坏味道；未通过禁止标记任务 ✅
+- code review PASS 后的单任务状态转换是该 Gate 授权结果，不反向使自身或 `tasks-phase-{N}-review` stale；review 必须记录 TASK ID、状态变更前 tasks 文件 hash 和精确 before/after，后续 reviewer 通过只反向恢复该状态单元格复算前 hash，形成连续授权转换链；禁止用此例外夹带任务语义变更
 
-> 📄 详细规则、结果模板与 subagent prompt：[references/ai-review-gate-guide.md](references/ai-review-gate-guide.md)
+> 📄 Review mode、blocking 边界、finding ledger、revision 失效规则、串行 gate、结果模板与短 prompt：[references/ai-review-gate-guide.md](references/ai-review-gate-guide.md)
 
 ### 8. 质量优先的并发执行
 
@@ -115,14 +127,16 @@ docs/
 可并发：
 - 只读分析：调用链探索、TC 查重、现状盘点、风险识别
 - 独立实现：依赖已完成、写入范围不重叠、验证方式明确的任务
-- 独立 review：不同输出文件的只读 AI Review Gate
+- 同层独立 review：彼此无依赖且输出文件隔离的只读 AI Review Gate
 
 必须串行：
+- 上下游 review gate，特别是 `requirements-design-review` → `tasks-phase-{N}-review`
+- 同一 gate 的 `initial` → 修复 → `closure`，以及任何共享输入、直接依赖或相同输出路径的 review
 - 共享文件改造、公共接口变更、迁移脚本、全局状态或配置变更
 - `tasks-phase-{N}.md` / `bugfix-task{N}.md` / `task-execution-plan.md` 的状态更新
 - Phase 级集成验证、验收结论和归档清理
 
-并发前必须确认：依赖已完成、写入范围不重叠、验证方式明确、review 输出路径唯一。并发后必须由主 agent 汇总 lane 结果并执行集成验证；集成验证失败时不得更新 Phase 完成状态。
+并发前必须确认：处于同一 gate 层级、彼此无依赖、输入 scope 不会互相改变、输出路径唯一且隔离。只要任一条件不满足就串行。并发后必须由主 agent 汇总 lane 结果并执行集成验证；集成验证失败时不得更新 Phase 完成状态。
 
 ---
 
@@ -136,7 +150,7 @@ docs/
 
 ### 设计文档
 
-核心：**必须有从入口到落地的调用链/流程分析并与用户确认**、数据模型和关键接口要有明确约束、每个修改点有 before/after 代码示意或伪 diff、TC 编号分配前先查重。若调研文档中有可执行结论，必须在 design 中重新落成正式方案，不能直接把 research 作为实现依据。
+核心：**必须有从入口到落地的调用链/流程分析并与用户确认**、数据模型和关键接口要有明确约束、每个修改点有 before/after 代码示意或伪 diff、TC 编号分配前先查重。涉及跨组件交互、API / 鉴权、异步消息或复杂状态流转时，序列图统一内嵌在 `design.md` 的调用链分析下，不额外建立图表目录。若调研文档中有可执行结论，必须在 design 中重新落成正式方案，不能直接把 research 作为实现依据。
 涉及新 UI、新功能面板、新页面布局或多区块组合设计时，先走 Design Mockup First：用单 HTML 低保真原型在 `docs/dev/ui/` 对齐布局与信息架构，用户确认后再写真实代码。
 
 > 📄 详细结构与评审清单：[references/design-spec-guide.md](references/design-spec-guide.md)
@@ -156,7 +170,7 @@ docs/
 ### 功能归档
 
 触发：用户说“归档”、`archive`、“清空工作区”或阶段完成需要沉淀时，进入功能归档流程。
-核心：将 `docs/dev/` 当前需要长期保留的内容归档到 `docs/archive/YYYYMMDD-<主题名>/`，创建 `ARCHIVE-README.md`，更新 `docs/archive/README.md`，并按归档规范清空工作区。AI review 文件只服务当前阶段治理，归档时不复制，归档后不保留。
+核心：将 `docs/dev/` 当前需要长期保留的内容归档到 `docs/archive/YYYYMMDD-<主题名>/`，创建 `ARCHIVE-README.md`，更新 `docs/archive/README.md`，并按归档规范清空工作区。`docs/dev/research/` 默认只作阶段性背景材料，若可选归档也必须标注非正式依据并从当前工作区清理；AI review 文件只服务当前阶段治理，归档时不复制，归档后不保留。
 
 > 📄 归档流程与目录规范：[references/archive-spec-guide.md](references/archive-spec-guide.md)
 
@@ -169,7 +183,9 @@ docs/
 
 ### 接口文档
 
-`docs/api/` 用于维护需要长期保存和跨需求复用的接口文档，例如 API 列表、请求/响应字段、IPC/HTTP/SDK/内部模块接口约定和接口变更说明。若需求或设计产生新的接口约定，应先写入正式设计文档；需要长期维护时，再同步沉淀到 `docs/api/`。
+核心：从入口视角沉淀长期维护的 API、协议和能力全貌。`docs/api/` 不只记录 API 列表、请求/响应字段、IPC/HTTP/SDK/内部模块接口约定和接口变更说明，还必须说明入口总览、能力矩阵、调用链、行为细节、错误降级、约束限制、集成方式和扩展方法，让用户和其他 agent 不读全代码也能理解仓库具备什么能力。若需求或设计产生新的接口约定，应先写入正式设计文档；需要长期维护时，再同步沉淀到 `docs/api/`。
+
+> 📄 API / 能力文档模板与评审清单：[references/api-spec-guide.md](references/api-spec-guide.md)
 
 ### 参考代码
 
@@ -185,9 +201,11 @@ docs/
 
 **开始新功能**：□ 目标语句 □ 约束事项 □ design 关联 US □ TC 无冲突 □ 用户确认后才拆任务 □ 文件命名规范
 
-**设计完成**：□ requirements-design-review 为 PASS □ 无阻断项 □ 仅在调用链确认点暂停等用户
+**设计完成**：□ Review-Mode / Scope / Input-Revision / Previous-Review 完整 □ requirements-design-review 对当前 revision 为 PASS □ finding ledger 稳定且无 open blocker □ deferred 已指定并回写 target Phase □ 复杂交互序列图已内嵌到 design 或说明无需 □ 仅在调用链确认点暂停等用户
 
-**开始新 Phase**：□ requirements 追加 US □ design 追加章节 □ plan 追加或更新行 □ tasks-phase-{N} □ Lane / 写入范围 / 可并发已标注 □ tasks-phase-{N}-review 为 PASS □ 旧 US 标 ✅
+**开始新 Phase**：□ requirements 追加 US □ design 追加章节 □ plan 追加或更新行 □ tasks-phase-{N} □ Lane / 写入范围 / 可并发已标注 □ 上游 requirements-design-review 对当前 revision 为 PASS □ tasks-phase-{N}-review 为 PASS □ 旧 US 标 ✅
+
+**Review 收敛**：□ initial 建基线 / closure 只收 blocker 与 diff / incremental-phase 只看当前 Phase □ blocker 仅属允许的三类 □ 旧 finding 未消失或重编号 □ prior blockers closed □ current scope no blocker □ invariants no regression → PASS 并停止
 
 **新对话接手**：□ 指导文件 → plan / bugfix → tasks □ 文件命名 □ 状态 vs 代码校准 □ 目标语句
 

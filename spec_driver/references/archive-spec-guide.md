@@ -4,6 +4,18 @@
 
 ---
 
+## 通用可读性要求
+
+归档文档用于跨会话检索和历史接手，必须让读者不用打开所有文件也能理解本批归档：
+
+- `ARCHIVE-README.md` 顶部必须给出归档日期、来源目录、主题、状态和内容范围。
+- 功能摘要用 1-3 段说明“解决什么问题、覆盖哪些模块、当前完成状态”。
+- 文件清单用表格列出路径和用途。
+- 未归档内容、临时 review、research 背景材料和测试快照必须说明边界。
+- `docs/archive/README.md` 的新增条目必须包含目录、日期、功能说明、状态和变更历史。
+
+---
+
 ## 1. 确认归档名称与目录
 
 - 向用户确认本轮归档的**英文主题名**（如 `code-structure-refactor`、`feature-xxx`），或由用户直接给出。
@@ -11,7 +23,7 @@
 
 ## 归档目录结构
 
-归档目录必须覆盖 `docs/dev/` 下需要长期保留的内容，包括根目录 Markdown、`sdd/`（不含 `sdd/reviews/`）、`ui/` 和测试报告快照：
+归档目录必须覆盖 `docs/dev/` 下需要长期保留的内容，包括根目录 Markdown、`sdd/`（不含 `sdd/reviews/`）、`ui/` 和测试报告快照。`docs/dev/research/` 是阶段性背景材料，默认不作为正式执行依据归档；若确有长期排查价值，可作为可选背景材料归档到 `research/`，但必须在 `ARCHIVE-README.md` 中标注“非正式依据”：
 
 ```text
 docs/archive/YYYYMMDD-<主题名>/
@@ -19,10 +31,11 @@ docs/archive/YYYYMMDD-<主题名>/
 ├── *.md
 ├── sdd/  不含 reviews/
 ├── ui/  如果有
+├── research/  可选，非正式依据
 └── test/ 如果有
 ```
 
-其中 `ui/` 和 `test-report.html` 按实际存在情况归档；`docs/dev/sdd/reviews/` 只服务当前阶段治理，不归档，归档后也不保留；`docs/dev/test/` 只归档 HTML 报告快照，不归档 JSON 数据文件和大体积产物。
+其中 `ui/`、`research/` 和 `test-report.html` 按实际存在情况归档；`docs/dev/sdd/reviews/` 只服务当前阶段治理，不归档，归档后也不保留；`docs/dev/test/` 只归档 HTML 报告快照，不归档 JSON 数据文件和大体积产物。`docs/dev/research/` 中影响需求、设计、任务或 Bugfix 的结论必须先回写到正式文档，不能只靠 research 进入归档。
 
 ## 2. 执行归档
 
@@ -42,17 +55,23 @@ docs/archive/YYYYMMDD-<主题名>/
    UI 设计稿（单页 HTML mockup）一并归档：
    `cp -r docs/dev/ui/ docs/archive/YYYYMMDD-<主题名>/ui/`
 
-5. **复制 docs/dev/test/ 测试报告**（若存在）
+5. **可选复制 docs/dev/research/ 背景材料**（若存在且需要保留）
+   若 research 文档只是临时讨论，跳过本步；若有长期排查价值，复制为非正式背景材料：
+   `cp -r docs/dev/research/ docs/archive/YYYYMMDD-<主题名>/research/`
+   复制前必须确认其中影响执行面的结论已回写到 `sdd/` 或 `bugfix-*` 正式文档。
+
+6. **复制 docs/dev/test/ 测试报告**（若存在）
    `docs/dev/test/` 已被 gitignore，仅归档 HTML 报告快照：
    `cp docs/dev/test/index.html docs/archive/YYYYMMDD-<主题名>/test-report.html`
    （不归档 JSON 数据文件和大体积产物。）
 
-6. **在归档目录添加 ARCHIVE-README.md**
+7. **在归档目录添加 ARCHIVE-README.md**
    - 说明：归档日期、内容来源（docs/dev 快照）、本批主题简述。
-   - 列出包含的所有文件及用途（README、sdd/ 文档、ui/ 设计稿、test-report 等）。
+   - 列出包含的所有文件及用途（README、sdd/ 文档、ui/ 设计稿、research/ 背景材料、test-report 等）。
    - 明确说明 AI review 文件为临时治理产物，未纳入归档。
+   - 若包含 research/，明确说明 research/ 只作为背景材料，正式依据以 sdd/ 或 bugfix-* 文档为准。
 
-7. **更新归档索引**
+8. **更新归档索引**
    在 `docs/archive/README.md` 中：
    - 在「归档条目」中新增本条（归档目录、日期、功能说明）；
    - 在「按日期排序」表中增加一行；
@@ -62,7 +81,7 @@ docs/archive/YYYYMMDD-<主题名>/
 ## 3. 清空 docs/dev
 
 1. **删除** docs/dev/ 下已复制到归档的**所有 .md 文件**。
-2. **删除已归档子目录**：`docs/dev/sdd/`、`docs/dev/ui/`（若存在）。其中 `docs/dev/sdd/reviews/` 虽未归档，也随当前工作区一起清理，归档后不保留。
+2. **删除已处理子目录**：`docs/dev/sdd/`、`docs/dev/ui/`、`docs/dev/research/`（若存在）。其中 `docs/dev/sdd/reviews/` 虽未归档，也随当前工作区一起清理，归档后不保留；`docs/dev/research/` 无论是否选择复制到归档，都必须从当前工作区清理，避免旧阶段背景材料污染新阶段。
 3. **保留并重写** `docs/dev/README.md` 为简短说明：
    - 本目录为当前开发工作区；
    - 本次已归档至 `docs/archive/YYYYMMDD-<主题名>/`；
@@ -81,6 +100,7 @@ docs/archive/YYYYMMDD-<主题名>/
 
 - `docs/dev/sdd/reviews/` — AI Review Gate 文件只服务当前阶段治理，不归档，归档后清理
 - `docs/dev/reviews/` — 兼容旧路径；若存在也不归档，归档后清理
+- `docs/dev/research/` — 阶段性背景材料，默认不归档；若可选归档，仍必须从 docs/dev 清理
 
 ## 注意：以下临时目录不归档，保持 .gitignore 控制
 
